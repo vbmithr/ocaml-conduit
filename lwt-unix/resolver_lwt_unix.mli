@@ -26,7 +26,7 @@ val system : Resolver_lwt.t
 (** [static hosts] constructs a resolver that looks up any resolution
     requests from the static [hosts] hashtable instead of using the
     system resolver. *)
-val static : (string, Conduit.endp) Hashtbl.t -> Resolver_lwt.t
+val static : (string, Conduit.endp list) Hashtbl.t -> Resolver_lwt.t
 
 (** {2 Rewrite and service functions}
     These can be used to assemble your own resolvers if the

@@ -42,7 +42,7 @@ module type S = sig
 
   (** A rewrite function resolves a {{!svc}service} and a URI into
       a concrete endpoint. *)
-  type rewrite_fn = svc -> Uri.t -> Conduit.endp io
+  type rewrite_fn = svc -> Uri.t -> (Conduit.endp list, string) result io
 
   (** A service function maps the string (such as [http] or [ftp]) from
       a URI scheme into a {{!svc}service} description that includes
@@ -78,7 +78,7 @@ module type S = sig
       resolver, but not otherwise modify it. *)
   val resolve_uri :
     ?rewrites:(string * rewrite_fn) list ->
-    uri:Uri.t -> t -> Conduit.endp io
+    uri:Uri.t -> t -> Conduit.endp list io
 end
 
 module Make(IO:Conduit.IO) = struct
@@ -89,7 +89,8 @@ module Make(IO:Conduit.IO) = struct
 
   (** A rewrite modifies an input URI with more specialization
       towards a concrete [endp] *)
-  type rewrite_fn = service -> Uri.t -> Conduit.endp IO.t [@@deriving sexp]
+  type rewrite_fn =
+    service -> Uri.t -> (Conduit.endp list, string) result IO.t [@@deriving sexp]
   type service_fn = string -> service option IO.t [@@deriving sexp]
 
   type t = {
@@ -105,7 +106,7 @@ module Make(IO:Conduit.IO) = struct
       | None -> ""
       | Some host -> host
     in
-    return (`Unknown host)
+    return (Error host)
 
   let default_service _name =
     (* TODO log *)
@@ -137,39 +138,30 @@ module Make(IO:Conduit.IO) = struct
   let resolve_uri ?rewrites ~uri t =
     (* Find the service associated with the URI *)
     match Uri.scheme uri with
-    | None ->
-      return (`Unknown "no scheme")
-    | Some scheme -> begin
-        t.service scheme
-        >>= function
-        | None -> return (`Unknown "unknown scheme")
-        | Some service ->
-          let host =
-            match Uri.host uri with
-            | None -> "localhost"
-            | Some host -> host
-          in
-          let trie =
-            (* If there are local rewrites, add them to the trie *)
-            match rewrites with
-            | None -> t.domains
-            | Some rewrites ->
-              List.fold_left (fun acc (host, f) ->
-                  Conduit_trie.insert (host_to_domain_list host) f acc)
-                t.domains rewrites
-          in
-          (* Find the longest prefix function that matches this host *)
-          let fn =
-            match Conduit_trie.longest_prefix (host_to_domain_list host) trie
-            with
-            | None -> t.default_lookup
-            | Some fn -> fn
-          in
-          fn service uri
-          >>= fun endp ->
-          if service.tls then
-            return (`TLS (host, endp))
-          else
-            return endp
-      end
+    | None -> return (Error "no scheme")
+    | Some scheme ->
+      t.service scheme >>= function
+      | None -> return (Error "unknown scheme")
+      | Some service ->
+        let host =
+          match Uri.host uri with
+          | None -> "localhost"
+          | Some host -> host
+        in
+        let trie =
+          (* If there are local rewrites, add them to the trie *)
+          match rewrites with
+          | None -> t.domains
+          | Some rewrites ->
+            List.fold_left (fun acc (host, f) ->
+                Conduit_trie.insert (host_to_domain_list host) f acc)
+              t.domains rewrites
+        in
+        (* Find the longest prefix function that matches this host *)
+        let fn =
+          match Conduit_trie.longest_prefix (host_to_domain_list host) trie with
+          | None -> t.default_lookup
+          | Some fn -> fn
+        in
+        fn service uri
 end

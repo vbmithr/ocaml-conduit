@@ -49,14 +49,19 @@
 
 (** End points that can potentially be connected to.
     These are typically returned by a call to a {{!resolution}resolver}. *)
-type endp = [
-  | `TCP of Ipaddr.t * int         (** IP address and destination port *)
-  | `Unix_domain_socket of string  (** Unix domain file path *)
-  | `Vchan_direct of int * string  (** domain id, port *)
-  | `Vchan_domain_socket of string * string (** Vchan Xen domain socket *)
-  | `TLS of string * endp          (** Wrap in a TLS channel, [hostname,endp] *)
-  | `Unknown of string             (** Failed resolution *)
-] [@@deriving sexp]
+type kind =
+  | TCP of Ipaddr.t * int         (** IP address and destination port *)
+  | Unix_domain_socket of string  (** Unix domain file path *)
+  | Vchan_direct of int * string  (** domain id, port *)
+  | Vchan_domain_socket of string * string (** Vchan Xen domain socket *)
+[@@deriving sexp]
+
+type endp = {
+  kind : kind ;
+  tls : bool
+}
+
+val create_endp : ?tls:bool -> kind -> endp
 
 (** Module type for cooperative threading that can be satisfied by
     Lwt or Async *)

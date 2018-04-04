@@ -4,6 +4,7 @@
   (public_name conduit-async)
   (wrapped false)
   (modules (conduit_async conduit_async_ssl))
+  (optional)
   (libraries (conduit async 
     (select conduit_async_ssl.ml from
      (async_ssl  -> conduit_async_ssl_real.ml)
